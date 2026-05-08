@@ -1,0 +1,56 @@
+name: Docker Validation Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  docker-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t flask-app .
+
+      - name: Show Image Size
+        run: docker images --format "table {{.Repository}}\t{{.Size}}"
+
+      - name: Run Container
+        run: |
+          docker run -d -p 5000:5000 --name flask-test flask-app
+
+      - name: Wait for App
+        run: sleep 10
+
+      - name: Test Health Endpoint
+        run: |
+          curl -f http://localhost:5000/health
+
+      - name: Test Root Endpoint
+        run: |
+          curl -f http://localhost:5000/
+
+      - name: Test POST Endpoint
+        run: |
+          curl -f -X POST http://localhost:5000/users \
+          -H "Content-Type: application/json" \
+          -d '{"name":"Tarun"}'
+
+      - name: Print Container Logs on Failure
+        if: failure()
+        run: docker logs flask-test
+
+      - name: Stop and Remove Container
+        if: always()
+        run: |
+          docker stop flask-test
+          docker rm flask-test
+
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: flask-app
